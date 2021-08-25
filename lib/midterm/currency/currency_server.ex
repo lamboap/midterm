@@ -21,6 +21,11 @@ defmodule Midterm.Currency.CurrencyServer do
     GenServer.call(create_name(currency_pair), :get_state)
   end
 
+  # clear cache
+  def override_scheduler(currency_pair) do
+    GenServer.call(create_name(currency_pair), :override_scheduler)
+  end
+
   # clear cache and override rate
   def override_scheduler(currency_pair, exchange_rate) do
     GenServer.call(create_name(currency_pair), {:override_scheduler, exchange_rate})
@@ -33,11 +38,16 @@ defmodule Midterm.Currency.CurrencyServer do
   def init(state) do
     # call task
     task = update_exchange_rate!(state)
+
     {:ok, %{state | ref: task.ref}}
   end
 
   def handle_call(:exchange_rate, _from, state) do
     {:reply, state[:exchange_rate], state}
+  end
+
+  def handle_call(:override_scheduler, _from, state) do
+    {:reply, :ok, source_module().update_exchange_rate!(state)}
   end
 
   def handle_call(:get_state, _from, state) do
@@ -71,7 +81,7 @@ defmodule Midterm.Currency.CurrencyServer do
   def handle_info({:DOWN, ref, :process, _pid, _reason}, %{ref: ref} = state) do
     # restart the task...
     schedule_exchange_fetch!(state)
-
+    # reset
     {:noreply, %{state | ref: nil}}
   end
 
