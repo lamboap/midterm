@@ -1,4 +1,5 @@
 defmodule Midterm.Currency.CurrencyServerImpl do
+  require Logger
   @currency_url Application.get_env(:midterm, :currency_url)
   @api_key Application.get_env(:midterm, :api_key)
 
@@ -6,14 +7,14 @@ defmodule Midterm.Currency.CurrencyServerImpl do
     curr_pair = state[:curr_pair]
 
     updated_state =
-      Task.Supervisor.async_nolink(Currency.TaskSupervisor, fn ->
+      Task.async(fn ->
         http_fetch_exchange_rate(curr_pair)
       end)
       |> Task.await()
       |> update_state(state)
 
     if updated_state[:exchange_rate] != state[:exchange_rate] do
-      IO.inspect(
+      Logger.debug(
         "updated: #{updated_state[:from_curr]}_#{updated_state[:to_curr]}  #{
           updated_state[:exchange_rate]
         }"

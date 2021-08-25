@@ -16,7 +16,6 @@ defmodule Midterm.Application do
         {Midterm.Repo, []},
         MidtermWeb.Endpoint,
         {Absinthe.Subscription, [MidtermWeb.Endpoint]},
-        Midterm.Currency.Account,
         {Task.Supervisor, name: Currency.TaskSupervisor}
         # {Midterm.Currency.CurrencyGenserver, %{curr_pair: {"USD", "JPY"}}}
 
@@ -45,7 +44,11 @@ defmodule Midterm.Application do
     |> Enum.map(fn {from_curr, to_curr} ->
       Supervisor.child_spec(
         {Midterm.Currency.CurrencyServer,
-         %{curr_pair: {from_curr, to_curr}, interval: Application.get_env(:midterm, :interval)}},
+         %{
+           curr_pair: {from_curr, to_curr},
+           interval: Application.get_env(:midterm, :interval),
+           ref: nil
+         }},
         id: Midterm.Currency.Combination.create_name({from_curr, to_curr})
       )
     end)

@@ -21,11 +21,6 @@ defmodule Midterm.Currency.CurrencyServer do
     GenServer.call(create_name(currency_pair), :get_state)
   end
 
-  # clear cache
-  def override_scheduler(currency_pair) do
-    GenServer.call(create_name(currency_pair), :override_scheduler)
-  end
-
   # clear cache and override rate
   def override_scheduler(currency_pair, exchange_rate) do
     GenServer.call(create_name(currency_pair), {:override_scheduler, exchange_rate})
@@ -36,15 +31,13 @@ defmodule Midterm.Currency.CurrencyServer do
   ###############
 
   def init(state) do
-    {:ok, schedule_exchange_fetch!(state)}
+    # call task
+    task = update_exchange_rate!(state)
+    {:ok, %{state | ref: task.ref}}
   end
 
   def handle_call(:exchange_rate, _from, state) do
     {:reply, state[:exchange_rate], state}
-  end
-
-  def handle_call(:override_scheduler, _from, state) do
-    {:reply, :ok, update_exchange_rate!(state)}
   end
 
   def handle_call(:get_state, _from, state) do
@@ -53,29 +46,50 @@ defmodule Midterm.Currency.CurrencyServer do
 
   def handle_call({:override_scheduler, exchange_rate}, _from, state) do
     man_state = Map.merge(state, %{man_exchange_rate: exchange_rate})
-    {:reply, :ok, update_exchange_rate!(man_state)}
+    {:reply, :ok, source_module().update_exchange_rate!(man_state)}
   end
 
-  def handle_info(:currency_fetch, state) do
-    {:noreply, update_exchange_rate!(state)}
+  def handle_info(:currency_fetch, %{ref: ref} = state) when is_reference(ref) do
+    {:noreply, state}
+  end
+
+  def handle_info(:currency_fetch, %{ref: nil} = state) do
+    task = update_exchange_rate!(state)
+    {:noreply, %{state | ref: task.ref}}
+  end
+
+  # https://hexdocs.pm/elixir/1.12/Task.Supervisor.html
+  def handle_info({ref, updated_state}, %{ref: ref} = _state) do
+    # No need to continue to monitor
+    Process.demonitor(ref, [:flush])
+    # reschedule
+    schedule_exchange_fetch!(updated_state)
+
+    {:noreply, %{updated_state | ref: nil}}
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{ref: ref} = state) do
+    # restart the task...
+    schedule_exchange_fetch!(state)
+
+    {:noreply, %{state | ref: nil}}
   end
 
   defp update_exchange_rate!(state) do
-    # update scheduler
-    schedule_exchange_fetch!(state)
-    # return new state
-    source_module().update_exchange_rate!(state)
+    Task.Supervisor.async_nolink(Currency.TaskSupervisor, fn ->
+      source_module().update_exchange_rate!(state)
+    end)
   end
 
   # helper functions
   defp schedule_exchange_fetch!(state) do
     # remove any previous runs
     if state[:timer] do
-      Process.cancel_timer(state.timer)
+      :timer.cancel(state.timer)
     end
 
     # schedule
-    timer = Process.send_after(self(), :currency_fetch, state[:interval])
+    timer = :timer.send_interval(state[:interval], self(), :currency_fetch)
     Map.merge(state, %{timer: timer})
   end
 
