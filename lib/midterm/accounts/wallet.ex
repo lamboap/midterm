@@ -1,7 +1,7 @@
 defmodule Midterm.Accounts.Wallet do
   use Ecto.Schema
   import Ecto.Changeset
-  import Ecto.Query, only: [from: 2]
+  import Ecto.Query, only: [where: 2]
   alias Midterm.Accounts.Wallet
   alias Midterm.Currency.CurrencyClient
 
@@ -33,9 +33,7 @@ defmodule Midterm.Accounts.Wallet do
 
   def validate_wallet_has_currency(user_id, currency) do
     fn repo, _ ->
-      case from(w in Wallet,
-             where: w.user_id == ^user_id and w.currency == ^currency
-           )
+      case where(Wallet, user_id: ^user_id, currency: ^currency)
            |> repo.all() do
         [] -> {:error, :wallet_not_found}
         [recip_wallet] -> {:ok, recip_wallet}
