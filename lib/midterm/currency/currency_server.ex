@@ -99,7 +99,7 @@ defmodule Midterm.Currency.CurrencyServer do
     end
 
     # schedule
-    timer = :timer.send_interval(state[:interval], self(), :currency_fetch)
+    timer = :timer.send_after(state[:interval], self(), :currency_fetch)
     Map.merge(state, %{timer: timer})
   end
 
